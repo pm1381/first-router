@@ -1,0 +1,4 @@
+vendor
+composer.lock
+/Core/Config.php
+/public/upload/
