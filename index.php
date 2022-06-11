@@ -5,6 +5,8 @@ ini_set('display_errors', 1);
 
 // Require composer autoloader
 require __DIR__ . '/vendor/autoload.php';
-require_once './src/index.php';
 
+$action = $_SERVER['REQUEST_URI'];
+
+require_once './src/Core/Loader.php';
 
