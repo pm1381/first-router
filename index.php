@@ -8,5 +8,5 @@ require __DIR__ . '/vendor/autoload.php';
 
 $action = $_SERVER['REQUEST_URI'];
 
-require_once './src/Core/Loader.php';
+require_once 'src/Core/Loader.php';
 
