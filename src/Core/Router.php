@@ -1,5 +1,10 @@
 <?php
 namespace App\Core;
+
+use App\Model\DisplayFormat;
+use Closure;
+use ReflectionMethod;
+
 class Router
 {
     private $routers;
@@ -12,9 +17,13 @@ class Router
     public function route($method, $action, $callback)
     {
         $action = trim($action, '/');
-        if (strpos($action, "{") !== false) {
-            $action = preg_replace('/{[^}]+}/', '(.*)', $action);
-        }
+        $this->routers[$action] = ['method' => $method, 'callback' => $callback];
+    }
+
+    public function curlyBraceRoute($method, $action, $callback)
+    {
+        $action = trim($action, '/');
+        $action = preg_replace('/{[^}]+}/', '(.*)', $action);
         $this->routers[$action] = ['method' => $method, 'callback' => $callback];
     }
 
@@ -23,28 +32,73 @@ class Router
         return $this->routers;
     }
 
-    public function dispatch($action)
+
+    private function closureAction($matches, $handler, &$callback, &$params){
+        // &$ make the argument pass by refrence;
+        if (gettype($handler['callback']) == 'object'){
+            $callback = $handler['callback'];
+            unset($matches[0]);
+            $params = $matches;
+            call_user_func($callback, ...$params);
+            return true;
+        }
+        return false;
+    }
+
+    private function annotationAction($matches, $handler, &$callback, &$params, $previousresult)
     {
-        $action = trim($action, '/');
-        $sentMethod = $_SERVER['REQUEST_METHOD'];
-        $callback = null;
-        $params = [];
-        foreach ($this->routers as $router => $handler) {
-            if(preg_match("%^{$router}$%", $action, $matches)) {
-                if (strtoupper($handler['method']) == $sentMethod) {
-                    $callback = $handler['callback'];
-                    unset($matches[0]);
-                    $params = $matches;
-                    break;
+        if (! $previousresult) {
+            if(preg_match("%^\w+@\w+$%", $handler['callback'], $classMethod)) {
+                unset($matches[0]);
+                $params = $matches;
+                list($controller, $methodName) = explode('@', $handler['callback']);
+                try {
+                    $controller = CONTROLLER_NAMESPACE . "\\" . $controller . 'Controller';
+                    $reflectedMethod = new ReflectionMethod($controller, $methodName);
+                    if ($reflectedMethod->isPublic() && !($reflectedMethod->isAbstract()))
+                    {
+                        if ($reflectedMethod->isStatic()) {
+                            forward_static_call_array(array($controller, $methodName), $params);
+                        } else {
+                            // make sure it can be instanciated
+                            if (\is_string($controller)) {
+                                $controller = new $controller();
+                            }
+                            $controllerObject = new $controller();
+                            $callback = array($controllerObject, $methodName);
+                            call_user_func_array($callback, $params);
+                        }
+                        return true;
+                    }
+                } catch (\ReflectionException $reflect) {
+                    DisplayFormat::jsonFormat(false, 'class or method not found' . ' %%% ' . $reflect->getMessage());
+                    return false;
                 }
+                return false;
             }
         }
+        return false;
+    }
 
-        if ($callback == null || !is_callable($callback)) {
-            http_response_code(404);
-            echo "page not found";
-        } else {
+    public function dispatch($action)
+    {
+        $closureResult = false; $annotationResult = false;
+        $action = trim($action, '/');
+        $sentMethod = $_SERVER['REQUEST_METHOD'];
+        $callback = null; $params = [];
+        foreach ($this->routers as $router => $handler) {
+            if (strtoupper($handler['method']) == $sentMethod && preg_match("%^{$router}$%", $action, $matches)) {
+                $closureResult = $this->closureAction($matches, $handler, $callback, $params);
+                $annotationResult = $this->annotationAction($matches, $handler, $callback, $params, $closureResult);
+            }
+
+            if ($closureResult || $annotationResult) {
+                break;
+            }
         }
-            call_user_func($callback, ...$params);
+        if ($callback == null) {
+            http_response_code(404);
+            DisplayFormat::jsonFormat(false, 'page not found');
+        }
     }
 }
