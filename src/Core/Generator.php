@@ -3,18 +3,16 @@
 namespace App\Core;
 
 use App\Model\DisplayFormat;
-use function PHPSTORM_META\type;
 
 class Generator extends Database
 {
     private $table;
     private $queryString;
-    private $row    = [];
-    private $where  = [];
-    private $limit  = 0;
-    private $order  = [];
-    // join, group
-    // and complicated queries;
+    private $row = [];
+    private $where = [];
+    private $limit = 0;
+    private $order = [];
+    // leftJoin, group CNT 
 
     public function __construct($table)
     {
@@ -90,7 +88,34 @@ class Generator extends Database
     {
         foreach ($data as $col => $value){
             $column = ":".$col;
-            $query->bindParam($column, $value);
+            $query->bindValue($column, $value);
+        }
+    }
+
+    private function whereBindParams($query, $data)
+    {
+        foreach($data as $col => $value) {
+            if (is_array($value) && gettype($col) == 'integer') {
+                // [['a' => 'b', 'e' => 'f']['c' => 'd']]
+                foreach($value as $valueKey => $valueVal) {
+                    $column = ":".$valueVal;
+                    $query->bindValue($column, $valueVal);
+                }
+            } else {
+                if (is_array($value)) {
+                    // ['id' => [1,2,3,4]]
+                    foreach($value as $val) {
+                        $column = ":".$val;
+                        $query->bindValue($column, $val);
+                    }
+                } else {
+                    // ['id' => 'pary']
+                    foreach ($data as $col => $value){
+                        $column = ":".$col;
+                        $query->bindValue($column, $value);
+                    }
+                }
+            }
         }
     }
 
@@ -144,31 +169,54 @@ class Generator extends Database
             return '';
         }
         $data = ' WHERE ';
+        $i = 1;
         foreach ($where as $key => $value) {
-            if (is_array($value) && type($key) == 'int' ) {
-                // [], ke yani har chi dakhelesh hast ba ham or beshan
-                $data .= '(';
+            if (is_array($value) && gettype($key) == 'integer' ) {
+                $data .= '( ';
+                $j = 1;
+                foreach($value as $valueKey => $valueVal) {
+                    $data .= '(';
+                    $data .= $valueKey . '=' . ':' . $valueVal;
+                    $data .= ') ';
+                    if ($j < count($value)) {
+                        $data .= 'AND ';
+                    }
+                    $j++;
+                }
                 $data .= ')';
+                if ($i < count($where)) {
+                    $data .= 'OR ';
+                }
+                $i++;
             } else {
                 if (is_array($value)) {
                     // 'id' => []
-                    $data .= '(';
                     if (preg_match('~.* !~isU', $key)) {
                         // yani != dar where;
                     } else {
-                        // yani == dar where;
+                        foreach($value as $val) {
+                            $data .= '(';
+                            $data .= $key . '=' . ':' . $val;
+                            $data .= ') ';
+                            if ($i < count($value)) {
+                                $data .= 'OR ';
+                            }
+                            $i++;
+                        }
                     }
-                    $data .= ') AND ';
                 } else {
                     // 'id' => 'pm'
                     $data .= '(';
-                    if (preg_match('~.* !~isU', $key)) {
+                    if (preg_match('~.*!~isU', $key)) {
                         // yani != dar where;
                     } else {
                         $data .= $key . '=' . ':' . $key;
-                        // yani == dar where;
                     }
-                    $data .= ')';
+                    $data .= ') ';
+                    if ($i < count($where)) {
+                        $data .= 'AND ';
+                    }
+                    $i++;
                 }
             }
         }
@@ -237,7 +285,7 @@ class Generator extends Database
         $where = $this->generateWhere($this->where);
         $query = self::$connection->prepare("SELECT ". $row ." FROM " . '`' . $this->table . '`' . $where);
         $this->setQuery("SELECT ". $row ." FROM " . '`' . $this->table . '`' . $where);
-        $this->insertBindParams($query, $this->where);
+        $this->whereBindParams($query, $this->where);
         try {
             $query->execute();
             if ($this->limit == 1) {
