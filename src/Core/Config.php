@@ -4,3 +4,4 @@ define('HOST_NAME', 'localhost');
 define('DB_NAME', 'firstRouter');
 define('USERNAME', 'root');
 define('PASSWORD', '');
+define("CONTROLLER_NAMESPACE", 'App\Controller');

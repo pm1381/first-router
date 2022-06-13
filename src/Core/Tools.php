@@ -6,13 +6,8 @@ class Tools
 {
     public static function show($data, $checkDie = false)
     {
-        if (is_array($data)) {
-            print_r($data);
-        } else {
-            echo $data;
-        }
-
-        
+        var_dump($data);
+           
         if ($checkDie){
             die();
         }

@@ -9,10 +9,10 @@ class Generator extends Database
 {
     private $table;
     private $queryString;
-    private $row = [];
-    private $where = [];
-    private $limit = 0;
-    private $order = [];
+    private $row    = [];
+    private $where  = [];
+    private $limit  = 0;
+    private $order  = [];
     // join, group
     // and complicated queries;
 
