@@ -10,9 +10,11 @@ class Generator extends Database
     private $queryString;
     private $row = [];
     private $where = [];
-    private $limit = 0;
+    private $limit = 0 ;
     private $order = [];
-    // leftJoin, group CNT 
+    private $join  = [];
+    private $group = '';
+    // limit, CNT
 
     public function __construct($table)
     {
@@ -37,16 +39,38 @@ class Generator extends Database
         return $this;
     }
 
+    public function join($join)
+    {
+        $this->join = $join;
+        return $this;
+    }
+
+    public function group($group)
+    {
+        $this->group = $group;
+        return $this;
+    }
+
     public function limit($limit)
     {
         $this->limit = $limit;
         return $this;
     }
-
+ 
     public function order($order)
     {
         $this->order = $order;
         return $this;
+    }
+
+    public function setQuery($query)
+    {
+        $this->queryString = $query;
+    }
+
+    public function getQuery()
+    {
+        return $this->queryString;
     }
 
     public function generateInsertRows($data)
@@ -72,8 +96,9 @@ class Generator extends Database
     {
         $cols = $this->generateInsertRows($data);
         $bind = $this->generateBinds($data);
-        $query = self::$connection->prepare("INSERT INTO " . '`' . $this->table . '`' . $cols ." VALUES " . $bind);
-        $this->setQuery("INSERT INTO " . '`' . $this->table . '`' . $cols ." VALUES " . $bind);
+        $statement = "INSERT INTO " . '`' . $this->table . '`' . $cols ." VALUES " . $bind;
+        $query = self::$connection->prepare($statement);
+        $this->setQuery($statement);
         $this->insertBindParams($query, $data);
         try {
             $query->execute();
@@ -90,6 +115,31 @@ class Generator extends Database
             $column = ":".$col;
             $query->bindValue($column, $value);
         }
+    }
+
+    private function generateJoin($join)
+    {
+        $data = '';
+        foreach ($join as $secondTable => $columns) {
+            foreach($columns as $key => $value) {
+                $data .= " LEFT JOIN " . '`' . $secondTable . '`' .  ' ON ' . $key . '=' . $value;
+            }
+        }
+        return $data;
+    }
+
+    private function generateOrder($order)
+    {
+        $data = '';
+        if (count($order) > 0) {
+            $data = ' ORDER BY ';
+            foreach ($order as $key => $type)
+            {
+                $type = strtoupper($type);
+                $data .= $key . '=' . $type . " ";
+            }
+        }
+        return $data;
     }
 
     private function whereBindParams($query, $data)
@@ -142,11 +192,16 @@ class Generator extends Database
     private function generateRows($row)
     {
         if (count($row) > 0) {
-            //$data = '(';
             $data = '';
             $i = 1;
             foreach ($row as $col) {
-                $data .= '`' .  $col . '`' ;
+                if (strpos("->", $col) !== false) {
+                    list($previousName, $newName) = explode("->", $col);
+                    $data .= '`' . $previousName . '`' . 'AS' . '`' . $newName . '`';
+                } else {
+                    $data .=  '`' . $col . '`' ;
+                }
+
                 if ($i < count($row)) {
                     $data .= ", ";
                 }
@@ -172,6 +227,7 @@ class Generator extends Database
         $i = 1;
         foreach ($where as $key => $value) {
             if (is_array($value) && gettype($key) == 'integer' ) {
+                // [], ke yani har chi dakhelesh hast ba ham or beshan
                 $data .= '( ';
                 $j = 1;
                 foreach($value as $valueKey => $valueVal) {
@@ -237,12 +293,21 @@ class Generator extends Database
         return $data;
     }
 
+    public function generateLimit($limit)
+    {
+        $data = ' LIMIT ';
+        if (is_array($limit)) {
+            $data .= $limit[0] . " OFFSET " . $limit[1] ;
+        } else {
+            $data .= $limit . ' ';
+        }
+    }
+
     public function update($data)
     {
         $where = $this->generateWhere($this->where);
         $set = $this->generateUpdateSet($data);
-        $query = self::$connection->prepare("UPDATE " . '`' . $this->table .'` '.  $set . $where);
-        $this->setQuery("UPDATE " . '`' . $this->table .'` '.  $set . $where);
+        $query = $this->createQuery('', '', $where, '', '', '', $set,'UPDATE');
         $this->insertBindParams($query, $data);
         $this->insertBindParams($query, $this->where);
         try {
@@ -257,8 +322,7 @@ class Generator extends Database
     public function delete($data)
     {
         $where = $this->generateWhere($data);
-        $query = self::$connection->prepare("DELETE FROM " . '`' .  $this->table . '`' . $where);
-        $this->setQuery("DELETE FROM " . '`' .  $this->table . '`' . $where);
+        $query = $this->createQuery('', '', $where, '', '', '', '', 'DELETE');
         $this->insertBindParams($query, $data);
         try {
             $query->execute();
@@ -269,22 +333,14 @@ class Generator extends Database
         }
     }
 
-    public function setQuery($query)
-    {
-        $this->queryString = $query;
-    }
-
-    public function getQuery()
-    {
-        return $this->queryString;
-    }
-
     public function select()
     {
         $row = $this->generateRows($this->row);
+        $limit = $this->generateLimit($this->limit);
         $where = $this->generateWhere($this->where);
-        $query = self::$connection->prepare("SELECT ". $row ." FROM " . '`' . $this->table . '`' . $where);
-        $this->setQuery("SELECT ". $row ." FROM " . '`' . $this->table . '`' . $where);
+        $join = $this->generateJoin($this->join);
+        $order = $this->generateOrder($this->order);
+        $query = $this->createQuery($row, $join, $where, $order, $limit, $this->group, '', 'SELECT');
         $this->whereBindParams($query, $this->where);
         try {
             $query->execute();
@@ -302,4 +358,25 @@ class Generator extends Database
             DisplayFormat::jsonFormat(false, 'an error occured while selecting' . $e->getMessage());
         }
     }
+
+    private function createQuery($row, $join = '', $where = '', $order = '', $limit = '', $group = '', $set = '', $crud)
+    {
+        $statement  = '';
+        switch ($crud) {
+            case 'SELECT':
+                $statement = "SELECT ". $row ." FROM " . '`' . $this->table . '`' . $join . $where . $order . $limit . $group;
+                break;
+            case 'UPDATE':
+                $statement = "UPDATE " . '`' . $this->table .'` '.  $set . $where;
+                break;
+            case 'DELETE':
+                $statement = "DELETE FROM " . '`' .  $this->table . '`' . $where;
+                break;
+            default:
+                break;
+        }
+        $query = self::$connection->prepare($statement);
+        $this->setQuery($statement);
+        return $query;
+    } 
 }
