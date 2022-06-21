@@ -1,6 +1,6 @@
 <?php
 define("DIRECTORY_SEPRATOR", "/");
-define('ROOT', DIR . DIRECTORY_SEPRATOR);
+define('ROOT', DIR);
 define('SRC', ROOT . 'src' . DIRECTORY_SEPRATOR);
 define('TEMPLATE', SRC . 'Template' . DIRECTORY_SEPRATOR);
 define('MODEL', SRC . 'Model' . DIRECTORY_SEPRATOR);
