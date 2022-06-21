@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Core;
-require_once 'Config.php';
+//require_once 'Config.php';
 
 class Database
 {

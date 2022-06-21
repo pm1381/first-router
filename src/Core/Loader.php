@@ -3,7 +3,7 @@
 use App\Core\Router;
 use App\Core\Tools;
 
-require_once 'Config.php';
+// require_once 'Config.php';
 
 $router = new Router();
 

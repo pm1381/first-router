@@ -5,3 +5,4 @@ define('DB_NAME', 'firstRouter');
 define('USERNAME', 'root');
 define('PASSWORD', '');
 define("CONTROLLER_NAMESPACE", 'App\Controller');
+define("DEBUG", true);
